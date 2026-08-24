@@ -3,47 +3,47 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {Vault} from "../src/Vault.sol";
+import {MockERC20, NonCompliantERC20, FailingERC20} from "./mocks/MockTokens.sol";
 
 contract VaultTest is Test {
     Vault vault;
+    MockERC20 token;
     address owner = makeAddr("owner");
     address attacker = makeAddr("attacker");
 
     function setUp() public {
-        vault = new Vault(owner);
+        token = new MockERC20();
+        vault = new Vault(owner, address(token));
     }
 
     // ---------------------------------------------------------------
     // Construction
     // ---------------------------------------------------------------
 
-    function test_ConstructorSetsOwner() public view {
+    function test_ConstructorSetsOwnerAndToken() public view {
         assertEq(vault.owner(), owner);
+        assertEq(address(vault.token()), address(token));
     }
 
-    function test_ConstructorRevertsOnZeroAddress() public {
+    function test_ConstructorRevertsOnZeroOwner() public {
         vm.expectRevert(Vault.ZeroAddress.selector);
-        new Vault(address(0));
+        new Vault(address(0), address(token));
+    }
+
+    function test_ConstructorRevertsOnZeroToken() public {
+        vm.expectRevert(Vault.ZeroAddress.selector);
+        new Vault(owner, address(0));
     }
 
     // ---------------------------------------------------------------
-    // Deposits
+    // Deposits — plain ERC20 transfers, no special function needed
     // ---------------------------------------------------------------
 
     function test_AnyoneCanDeposit() public {
-        vm.deal(attacker, 1 ether);
+        token.mint(attacker, 100e6);
         vm.prank(attacker);
-        (bool ok,) = address(vault).call{value: 1 ether}("");
-        assertTrue(ok);
-        assertEq(vault.balance(), 1 ether);
-    }
-
-    function test_DepositEmitsEvent() public {
-        vm.deal(address(this), 1 ether);
-        vm.expectEmit(true, false, false, true);
-        emit Vault.Deposited(address(this), 1 ether);
-        (bool ok,) = address(vault).call{value: 1 ether}("");
-        assertTrue(ok);
+        token.transfer(address(vault), 100e6);
+        assertEq(vault.balance(), 100e6);
     }
 
     // ---------------------------------------------------------------
@@ -51,74 +51,77 @@ contract VaultTest is Test {
     // ---------------------------------------------------------------
 
     function test_OwnerCanWithdraw() public {
-        vm.deal(address(vault), 1 ether);
-        uint256 before = owner.balance;
+        token.mint(address(vault), 100e6);
 
         vm.prank(owner);
-        vault.withdraw(0.4 ether);
+        vault.withdraw(40e6);
 
-        assertEq(owner.balance, before + 0.4 ether);
-        assertEq(vault.balance(), 0.6 ether);
+        assertEq(token.balanceOf(owner), 40e6);
+        assertEq(vault.balance(), 60e6);
     }
 
     function test_OwnerCanWithdrawAll() public {
-        vm.deal(address(vault), 1 ether);
-        uint256 before = owner.balance;
+        token.mint(address(vault), 100e6);
 
         vm.prank(owner);
         vault.withdrawAll();
 
-        assertEq(owner.balance, before + 1 ether);
+        assertEq(token.balanceOf(owner), 100e6);
         assertEq(vault.balance(), 0);
     }
 
     function test_NonOwnerCannotWithdraw() public {
-        vm.deal(address(vault), 1 ether);
+        token.mint(address(vault), 100e6);
         vm.prank(attacker);
         vm.expectRevert(Vault.NotOwner.selector);
-        vault.withdraw(1 ether);
+        vault.withdraw(100e6);
     }
 
     function test_NonOwnerCannotWithdrawAll() public {
-        vm.deal(address(vault), 1 ether);
+        token.mint(address(vault), 100e6);
         vm.prank(attacker);
         vm.expectRevert(Vault.NotOwner.selector);
         vault.withdrawAll();
     }
 
     function test_WithdrawMoreThanBalanceReverts() public {
-        vm.deal(address(vault), 1 ether);
+        token.mint(address(vault), 100e6);
         vm.prank(owner);
         vm.expectRevert(Vault.InsufficientBalance.selector);
-        vault.withdraw(2 ether);
+        vault.withdraw(200e6);
     }
 
     function test_NoOwnershipTransferFunctionExists() public {
-        // There is no transferOwnership selector on the contract at all —
-        // any call to one reverts because it doesn't exist (no fallback).
         (bool ok,) = address(vault).call(abi.encodeWithSignature("transferOwnership(address)", attacker));
         assertFalse(ok);
         assertEq(vault.owner(), owner);
     }
 
     // ---------------------------------------------------------------
-    // Reentrancy — owner is a malicious contract, should still be safe
+    // Non-standard token handling — this is the whole reason SafeERC20
+    // is used instead of a raw token.transfer() call.
     // ---------------------------------------------------------------
 
-    function test_ReentrancyDuringWithdrawCannotDrainExtra() public {
-        ReentrantOwner rOwner = new ReentrantOwner();
-        Vault rVault = new Vault(address(rOwner));
-        rOwner.setVault(rVault);
+    function test_WithdrawWorksWithNonCompliantToken() public {
+        // Mirrors real mainnet USDT's actual ABI: transfer() returns nothing.
+        NonCompliantERC20 usdtLike = new NonCompliantERC20();
+        Vault v = new Vault(owner, address(usdtLike));
+        usdtLike.mint(address(v), 100e6);
 
-        vm.deal(address(rVault), 1 ether);
+        vm.prank(owner);
+        v.withdrawAll();
 
-        vm.prank(address(rOwner));
-        rVault.withdrawAll();
+        assertEq(usdtLike.balanceOf(owner), 100e6);
+    }
 
-        // Reentrant calls during the single ETH transfer cannot pull out more
-        // than the vault ever held, because balance is checked live each call.
-        assertEq(address(rVault).balance, 0);
-        assertEq(address(rOwner).balance, 1 ether);
+    function test_WithdrawRevertsWhenTokenReportsFailure() public {
+        FailingERC20 badToken = new FailingERC20();
+        Vault v = new Vault(owner, address(badToken));
+        badToken.mint(address(v), 100e6);
+
+        vm.prank(owner);
+        vm.expectRevert();
+        v.withdraw(50e6);
     }
 
     // ---------------------------------------------------------------
@@ -127,8 +130,8 @@ contract VaultTest is Test {
 
     function testFuzz_NonOwnerNeverWithdraws(address caller, uint256 amount) public {
         vm.assume(caller != owner);
-        vm.deal(address(vault), 5 ether);
-        amount = bound(amount, 0, 5 ether);
+        token.mint(address(vault), 5000e6);
+        amount = bound(amount, 0, 5000e6);
 
         vm.prank(caller);
         vm.expectRevert(Vault.NotOwner.selector);
@@ -136,44 +139,25 @@ contract VaultTest is Test {
     }
 
     function testFuzz_OwnerWithdrawNeverExceedsBalance(uint256 depositAmount, uint256 withdrawAmount) public {
-        depositAmount = bound(depositAmount, 0, 1000 ether);
-        vm.deal(address(vault), depositAmount);
+        depositAmount = bound(depositAmount, 0, 1_000_000e6);
+        token.mint(address(vault), depositAmount);
 
         if (withdrawAmount > depositAmount) {
             vm.prank(owner);
             vm.expectRevert(Vault.InsufficientBalance.selector);
             vault.withdraw(withdrawAmount);
         } else {
-            uint256 before = owner.balance;
             vm.prank(owner);
             vault.withdraw(withdrawAmount);
-            assertEq(owner.balance, before + withdrawAmount);
+            assertEq(token.balanceOf(owner), withdrawAmount);
         }
     }
 
     function testFuzz_DepositsAlwaysIncreaseBalance(uint96 amount) public {
-        vm.deal(address(this), amount);
+        token.mint(attacker, amount);
         uint256 before = vault.balance();
-        (bool ok,) = address(vault).call{value: amount}("");
-        assertTrue(ok);
+        vm.prank(attacker);
+        token.transfer(address(vault), amount);
         assertEq(vault.balance(), before + amount);
-    }
-}
-
-/// @dev Helper contract used only to test that a malicious/reentrant owner
-/// cannot extract more value than the vault holds.
-contract ReentrantOwner {
-    Vault public vault;
-    uint256 public reentries;
-
-    function setVault(Vault _vault) external {
-        vault = _vault;
-    }
-
-    receive() external payable {
-        if (reentries < 3 && address(vault).balance > 0) {
-            reentries++;
-            vault.withdrawAll();
-        }
     }
 }

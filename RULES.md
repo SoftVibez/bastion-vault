@@ -1,9 +1,10 @@
 # Rules of Engagement
 
 **Status:** LIVE — real funds, real chain.
-**Network:** Base (chain id 8453)
+**Network:** Polygon (chain id 137)
+**Token:** USDT (PoS) — [`0xc2132D...B58e8F`](https://polygonscan.com/token/0xc2132D05D31c914a87C6611C10748AEb04B58e8F)
 **Contract:** `Vault` — address published in [README.md](./README.md) once deployed.
-**Prize:** the entire on-chain balance of the vault (~$10 in ETH at launch).
+**Prize:** the entire on-chain balance of the vault (~$10 in USDT at launch).
 **Window:** 7 days from deployment — deadline published in [README.md](./README.md).
 
 ## You win if
@@ -27,8 +28,10 @@ a short writeup, and I'll confirm publicly.
 
 - Social engineering, phishing, or otherwise trying to obtain the owner's
   private key directly from me.
-- Attacking Base's sequencer, RPC providers, block explorers, or any
+- Attacking Polygon's validators, RPC providers, block explorers, or any
   infrastructure that isn't the `Vault` contract itself.
+- Exploiting a bug in the USDT token contract itself rather than in `Vault` —
+  that's Tether's attack surface, not this project's.
 - Attacking this GitHub repo, my other accounts, or anything not the
   deployed contract.
 - Denial of service (e.g. spamming RPC) rather than an actual fund
