@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bastion Wallet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #08080c;
+    --bg-glow-1: #241c3f;
+    --bg-glow-2: #1a2e2a;
+    --panel: #131118;
+    --panel-2: #1a1720;
+    --border: rgba(255,255,255,0.08);
+    --border-soft: rgba(255,255,255,0.05);
+    --text: #f3f1f7;
+    --muted: #9691a3;
+    --muted-2: #6b6778;
+    --accent: #8b7cff;
+    --accent-hover: #9d90ff;
+    --accent-soft: rgba(139,124,255,0.14);
+    --gold: #f4b942;
+    --good: #3ddc97;
+    --good-soft: rgba(61,220,151,0.12);
+    --bad: #ff6b6b;
+    --bad-soft: rgba(255,107,107,0.12);
+    --sans: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: "JetBrains Mono", "SFMono-Regular", Consolas, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(680px 420px at 12% -8%, var(--bg-glow-1), transparent 60%),
+      radial-gradient(600px 380px at 100% 12%, var(--bg-glow-2), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: var(--body);
+    min-height: 100vh;
+    padding: 40px 16px 72px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand svg { display: block; }
+  .brand-text { display: flex; align-items: baseline; gap: 8px; }
+  h1 {
+    font-family: var(--sans);
+    font-size: 19px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .status-pill {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--good-soft);
+    color: var(--good);
+  }
+  .status-pill.off { background: var(--panel-2); color: var(--muted-2); }
+
+  .btn {
+    background: var(--accent);
+    color: #0c0a14;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+  }
+  .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn.secondary { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+  .btn.secondary:hover { background: #221f2a; }
+  .btn.block { width: 100%; }
+
+  .pill {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 7px 12px;
+    border-radius: 999px;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex: none; }
+  .pill.warn .dot { background: var(--bad); }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--panel) 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px;
+    margin-bottom: 14px;
+    position: relative;
+  }
+  .card h2 {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 0;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .row:last-child { border-bottom: none; }
+  .row .label { color: var(--muted); }
+  .row .value {
+    font-family: var(--mono);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .copy-btn {
+    background: none;
+    border: none;
+    color: var(--muted-2);
+    cursor: pointer;
+    padding: 2px;
+    display: inline-flex;
+    border-radius: 4px;
+    transition: color 0.12s ease;
+  }
+  .copy-btn:hover { color: var(--accent); }
+
+  .address-display {
+    font-family: var(--mono);
+    font-size: 14px;
+    background: #08080c;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    word-break: break-all;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .balance-card { text-align: left; overflow: hidden; }
+  .balance {
+    font-family: var(--sans);
+    font-size: 46px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--gold);
+    margin: 2px 0 4px;
+    line-height: 1.1;
+  }
+  .balance .unit { font-size: 22px; color: var(--muted); font-weight: 600; margin-left: 4px; }
+  .balance-secondary { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .sub { color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .field { display: flex; gap: 8px; margin-top: 14px; }
+  input[type=number], input[type=text] {
+    flex: 1;
+    background: #08080c;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-family: var(--mono);
+    font-size: 14px;
+    min-width: 0;
+    transition: border-color 0.12s ease;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  input::placeholder { color: var(--muted-2); }
+  .field-stack { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+
+  .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .status { font-size: 12.5px; margin-top: 10px; min-height: 16px; font-family: var(--mono); }
+  .status.ok { color: var(--good); }
+  .status.err { color: var(--bad); }
+  .status.pending { color: var(--accent); }
+
+  .owner-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+
+  .notice {
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--border-soft);
+    border-radius: 14px;
+    padding: 16px 18px;
+    line-height: 1.6;
+  }
+  .notice.warn { border-color: rgba(244,185,66,0.3); background: rgba(244,185,66,0.06); color: #e8c775; }
+  .notice b { color: var(--text); }
+  code {
+    font-family: var(--mono);
+    background: #08080c;
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-size: 12px;
+    border: 1px solid var(--border-soft);
+  }
+
+  .event {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .event:last-child { border-bottom: none; }
+  .event-left { display: flex; align-items: center; gap: 8px; }
+  .event-icon {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex: none;
+    font-size: 12px;
+  }
+  .event-icon.in { background: var(--good-soft); color: var(--good); }
+  .event-icon.out { background: var(--bad-soft); color: var(--bad); }
+  .event-addr { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .empty { color: var(--muted-2); font-size: 13px; padding: 10px 0; }
+
+  footer { text-align: center; color: var(--muted-2); font-size: 12px; margin-top: 36px; }
+  footer a { color: var(--muted); }
+  footer .sep { margin: 0 8px; opacity: 0.4; }
+
+  @media (max-width: 480px) {
+    .balance { font-size: 36px; }
+    .card { padding: 18px; }
+    .field { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="9" fill="url(#g)"/>
+        <path d="M16 8L23 11.5V16.2C23 20.4 20.1 24.2 16 25.5C11.9 24.2 9 20.4 9 16.2V11.5L16 8Z" stroke="#0c0a14" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M13 16.3L15.2 18.5L19.3 14" stroke="#0c0a14" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#8b7cff"/>
+            <stop offset="1" stop-color="#f4b942"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <div class="brand-text">
+        <h1>Bastion Wallet</h1>
+        <span class="status-pill">Live on Polygon</span>
+      </div>
+    </div>
+    <div id="walletArea">
+      <button class="btn" id="connectBtn">Connect Wallet</button>
+    </div>
+  </header>
+
+  <div class="card balance-card">
+    <h2>Balance</h2>
+    <div class="balance" id="balanceValue">— <span class="unit">USDT</span></div>
+    <div class="balance-secondary" id="polBalance">— POL (for gas)</div>
+    <div class="sub">Live, read directly from the chain. No backend, no cached data.</div>
+  </div>
+
+  <div class="card">
+    <h2>↓ Receive</h2>
+    <div class="sub">This is the wallet's real address. Anyone can send USDT (Polygon network) here.</div>
+    <div class="address-display" style="margin-top:14px">
+      <span id="walletAddr">0x5c737c3b0ea2399b4BA434e6e5e689521bEB9405</span>
+    </div>
+  </div>
+
+  <div class="card" id="sendCard" style="display:none">
+    <h2>↑ Send <span class="owner-badge">Wallet owner only</span></h2>
+    <div class="sub">Visible only because your connected wallet matches this address — meaning you hold the key.</div>
+    <div class="field-stack">
+      <input type="text" id="sendTo" placeholder="Recipient address (0x…)" />
+      <div class="field" style="margin-top:0">
+        <input type="number" id="sendAmount" placeholder="1.00" min="0" step="0.01" />
+        <button class="btn" id="sendBtn">Send</button>
+      </div>
+    </div>
+    <div class="status" id="sendStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>Recent activity</h2>
+    <div id="eventList"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="notice">
+    <b>Where the real security lives:</b> this page enforces nothing — it can't. There is no smart contract, no
+    access-control code, no admin logic. This address is a plain wallet: whoever holds its private key controls
+    100% of the funds, and this page just reads public chain data and asks your connected wallet to sign
+    transactions on your behalf. The only thing standing between these funds and anyone else is that one private
+    key never being exposed. See <a href="https://github.com/SoftVibez/bastion-vault/blob/master/RULES.md" target="_blank" rel="noopener">RULES.md</a>
+    for what "hacking" this actually means in that context.
+  </div>
+
+  <footer>
+    <a href="https://github.com/SoftVibez/bastion-vault" target="_blank" rel="noopener">Source</a>
+    <span class="sep">·</span>
+    <a href="https://github.com/SoftVibez/bastion-vault/blob/master/RULES.md" target="_blank" rel="noopener">Rules of engagement</a>
+  </footer>
+
+</div>
+
+<script>
+// ---- Configuration -------------------------------------------------------
+const WALLET_ADDRESS = "0x5c737c3b0ea2399b4BA434e6e5e689521bEB9405";
+const CHAIN_ID_HEX = "0x89"; // Polygon mainnet = 137
+const RPC_URL = "https://polygon-bor-rpc.publicnode.com";
+const EXPLORER = "https://polygonscan.com";
+const USDT_ADDRESS = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"; // (PoS) Tether USD
+const USDT_DECIMALS = 6;
+
+const ERC20_ABI = [
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function balanceOf(address owner) view returns (uint256)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)"
+];
+
+// ---- State -----------------------------------------------------------
+let readProvider, signer, signerAddress;
+let usdtRead, usdtWrite;
+
+const $ = (id) => document.getElementById(id);
+
+function short(addr) {
+  return addr ? addr.slice(0, 6) + "…" + addr.slice(-4) : "—";
+}
+
+function setStatus(el, msg, kind) {
+  el.textContent = msg;
+  el.className = "status" + (kind ? " " + kind : "");
+}
+
+function copyBtn(fullValue) {
+  const btn = document.createElement("button");
+  btn.className = "copy-btn";
+  btn.title = "Copy address";
+  btn.innerHTML =
+    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  btn.addEventListener("click", () => navigator.clipboard.writeText(fullValue));
+  return btn;
+}
+
+async function init() {
+  const addrRow = $("walletAddr");
+  addrRow.parentElement.appendChild(copyBtn(WALLET_ADDRESS));
+
+  readProvider = new ethers.JsonRpcProvider(RPC_URL);
+  usdtRead = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, readProvider);
+
+  await refreshBalance();
+  await loadEvents();
+}
+
+async function refreshBalance() {
+  try {
+    const bal = await usdtRead.balanceOf(WALLET_ADDRESS);
+    $("balanceValue").innerHTML = `${ethers.formatUnits(bal, USDT_DECIMALS)} <span class="unit">USDT</span>`;
+  } catch (e) {
+    $("balanceValue").textContent = "error";
+  }
+  try {
+    const pol = await readProvider.getBalance(WALLET_ADDRESS);
+    $("polBalance").textContent = `${ethers.formatEther(pol)} POL (for gas)`;
+  } catch (e) {
+    $("polBalance").textContent = "";
+  }
+}
+
+async function loadEvents() {
+  try {
+    const latest = await readProvider.getBlockNumber();
+    // Public RPCs commonly cap eth_getLogs to a few thousand blocks per call —
+    // keep this conservative so it works reliably rather than erroring out.
+    const fromBlock = Math.max(0, latest - 3000);
+    const [received, sent] = await Promise.all([
+      usdtRead.queryFilter(usdtRead.filters.Transfer(null, WALLET_ADDRESS), fromBlock, latest),
+      usdtRead.queryFilter(usdtRead.filters.Transfer(WALLET_ADDRESS, null), fromBlock, latest),
+    ]);
+    const all = [...received.map(e => ({...e, kind: "in"})), ...sent.map(e => ({...e, kind: "out"}))]
+      .sort((a, b) => b.blockNumber - a.blockNumber)
+      .slice(0, 15);
+
+    if (all.length === 0) {
+      $("eventList").innerHTML = '<div class="empty">No activity yet.</div>';
+      return;
+    }
+
+    $("eventList").innerHTML = all.map(e => {
+      const amt = ethers.formatUnits(e.args[2], USDT_DECIMALS);
+      const counterparty = short(e.kind === "in" ? e.args[0] : e.args[1]);
+      const label = e.kind === "in" ? "Received" : "Sent";
+      const icon = e.kind === "in" ? "↓" : "↑";
+      return `<div class="event">
+        <span class="event-left">
+          <span class="event-icon ${e.kind}">${icon}</span>
+          <span>${label} <span class="event-addr">${counterparty}</span></span>
+        </span>
+        <a href="${EXPLORER}/tx/${e.transactionHash}" target="_blank" rel="noopener">${amt} USDT</a>
+      </div>`;
+    }).join("");
+  } catch (e) {
+    $("eventList").innerHTML = '<div class="empty">Could not load activity.</div>';
+  }
+}
+
+async function connectWallet() {
+  if (!window.ethereum) {
+    alert("No wallet extension found. Install MetaMask or a similar wallet to connect.");
+    return;
+  }
+  const browserProvider = new ethers.BrowserProvider(window.ethereum);
+  await browserProvider.send("eth_requestAccounts", []);
+
+  const network = await browserProvider.getNetwork();
+  if (network.chainId !== 137n) {
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: CHAIN_ID_HEX }],
+      });
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: CHAIN_ID_HEX,
+            chainName: "Polygon",
+            nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+            rpcUrls: [RPC_URL],
+            blockExplorerUrls: [EXPLORER],
+          }],
+        });
+      }
+    }
+  }
+
+  signer = await browserProvider.getSigner();
+  signerAddress = await signer.getAddress();
+  usdtWrite = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, signer);
+
+  $("walletArea").innerHTML = "";
+  const isSelf = signerAddress.toLowerCase() === WALLET_ADDRESS.toLowerCase();
+  const pill = document.createElement("span");
+  pill.className = "pill" + (isSelf ? "" : " warn");
+  pill.innerHTML = `<span class="dot"></span>${short(signerAddress)}`;
+  $("walletArea").appendChild(pill);
+
+  $("sendCard").style.display = isSelf ? "block" : "none";
+}
+
+async function send() {
+  const to = $("sendTo").value.trim();
+  const amountStr = $("sendAmount").value;
+  if (!ethers.isAddress(to)) return setStatus($("sendStatus"), "Enter a valid recipient address.", "err");
+  if (!amountStr || Number(amountStr) <= 0) return setStatus($("sendStatus"), "Enter an amount.", "err");
+
+  try {
+    setStatus($("sendStatus"), "Confirm in wallet…", "pending");
+    const tx = await usdtWrite.transfer(to, ethers.parseUnits(amountStr, USDT_DECIMALS));
+    setStatus($("sendStatus"), "Pending: " + tx.hash, "pending");
+    await tx.wait();
+    setStatus($("sendStatus"), "Sent.", "ok");
+    await refreshBalance();
+    await loadEvents();
+  } catch (e) {
+    setStatus($("sendStatus"), e.shortMessage || e.message || "Failed.", "err");
+  }
+}
+
+$("connectBtn").addEventListener("click", connectWallet);
+$("sendBtn").addEventListener("click", send);
+
+init();
+</script>
+</body>
+</html>
