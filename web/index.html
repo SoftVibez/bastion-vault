@@ -7,7 +7,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"
+  integrity="sha384-6Zl0Pc8zjSz8KvmNeXRvUQgY4ryFb+BwDvKCmLYcBME0joAaru491tQgi9B7zsMM"
+  crossorigin="anonymous"></script>
+<script>
+  // Clickjacking guard: if this page is ever loaded inside an iframe (e.g. an
+  // attacker embedding it invisibly on another site to trick a click into
+  // approving a transaction), break out to the top-level window instead of
+  // rendering the wallet UI inside someone else's page.
+  if (window.top !== window.self) {
+    window.top.location = window.self.location;
+  }
+</script>
 <style>
   :root {
     --bg: #08080c;
