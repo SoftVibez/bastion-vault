@@ -1,151 +1,98 @@
 # Bastion Wallet
 
-A minimal, immutable, single-owner USDT wallet, written from scratch, holding
-a small amount of real money on a live chain — open sourced so anyone can try
-to break it.
+A single, securely-generated wallet holding a small amount of real money on a
+live chain — open sourced, with the address and frontend public, so anyone
+can try to break it.
 
-**If you find a way to withdraw funds as a non-owner, they're yours to keep.**
+**If you get the funds out without my cooperation, they're yours to keep.**
 See [RULES.md](./RULES.md) for the exact terms, scope, and deadline.
 
 | | |
 |---|---|
 | Network | Polygon (mainnet) |
 | Token | USDT (PoS) — [`0xc2132D...B58e8F`](https://polygonscan.com/token/0xc2132D05D31c914a87C6611C10748AEb04B58e8F) |
-| Contract | `Vault.sol` — address: `TBD, filled in at deployment` |
-| Verified source | `TBD` (Polygonscan link, filled in at deployment) |
-| Bounty | Entire vault balance (~$10 in USDT at launch) |
-| Window | 7 days from deployment — see [RULES.md](./RULES.md) |
-| Frontend | [`web/index.html`](./web/index.html) — connect-wallet dashboard, no backend |
+| Wallet address | [`0x5c737c3b0ea2399b4BA434e6e5e689521bEB9405`](https://polygonscan.com/address/0x5c737c3b0ea2399b4BA434e6e5e689521bEB9405) |
+| Live dashboard | **[softvibez.github.io/bastion-vault](https://softvibez.github.io/bastion-vault/)** |
+| Bounty | Entire wallet balance (~$10 in USDT) |
+| Window | 7 days from funding — see [RULES.md](./RULES.md) |
 
-## Why this exists
+## What this is
 
-Most "unhackable wallet" claims are marketing. This is an attempt to be
-honest about what that phrase can actually mean: not "provably invulnerable,"
-but "small and simple enough that there's almost nowhere for a bug to hide."
-The design bet is that **the safest wallet is the one that does the least.**
+Exactly what it sounds like: one private key, one address, no smart contract,
+no backend. The `docs/index.html` page (source of truth in [`web/index.html`](./web/index.html))
+is a static dashboard — balance, receive address, connect-and-send — that
+reads directly from the Polygon chain and asks a connected wallet (e.g.
+MetaMask) to sign anything it needs signed. The page itself holds no keys and
+enforces nothing; it's a convenience window onto public chain data.
 
-## What it is
+## Why a plain wallet, not a smart contract
 
-`Vault` is about 60 lines of Solidity. It does exactly two things:
+This project started as a from-scratch smart-contract vault (see
+[Earlier design](#earlier-design-not-currently-live) below) on the theory
+that a tiny, heavily-tested contract with an immutable owner check would be
+about as hard to break as a solo project reasonably gets. That's still true
+— but deploying a contract turned out to need a separate native gas token on
+whatever chain it lived on, and getting even a small amount of that gas
+token proved to be a real, multi-day logistical obstacle unrelated to
+security. A plain wallet needs no deployment at all: funding it *is* the
+entire setup.
 
-1. Accepts USDT from anyone (a plain ERC20 `transfer` to the contract's address).
-2. Lets a single, immutable `owner` withdraw it (`withdraw` / `withdrawAll`).
+Worth being honest about the tradeoff this makes: a smart contract's
+`onlyOwner` check and a plain wallet's key custody are actually protecting
+against the same underlying thing — whoever holds the signing key. The
+contract's real extra value would only show up against a *logic bug* letting
+someone bypass that check without the key; since we'd already kept that
+contract deliberately minimal and tested it hard, that risk was already
+small. Dropping it removes an already-small risk at zero real cost, given
+both designs share an identical key-custody dependency for the same single
+owner. See [`RULES.md`](./RULES.md) for what "hacking" this actually means
+under this design.
 
-That's the entire feature set. No upgradability, no proxy, no admin
-functions, no support for any token other than the one fixed at deployment,
-no external dependencies beyond OpenZeppelin's `SafeERC20` (for the token
-transfer itself) and `forge-std` for testing.
+## Threat model
 
-```solidity
-contract Vault {
-    address public immutable owner;
-    IERC20 public immutable token;
-
-    function withdraw(uint256 amount) external onlyOwner { ... }
-    function withdrawAll() external onlyOwner { ... }
-    function balance() external view returns (uint256) { ... }
-}
-```
-
-There is deliberately no `deposit()` function — ERC20 tokens can always be
-sent to any address without that address's cooperation, so a special deposit
-function would only add a second, redundant code path.
-
-See [`src/Vault.sol`](./src/Vault.sol) for the full, commented source.
-
-## Threat model / design decisions
-
-| Decision | Reasoning |
+| What's true | Why it matters |
 |---|---|
-| `owner` and `token` are `immutable`, set once in the constructor | No `transferOwnership` function exists at all, and the contract can never be pointed at a different token. Nothing to hijack. |
-| No upgradability / no proxy | Upgradable contracts move the real attack surface to "who controls the upgrade," and proxy patterns carry their own bug class (storage collisions, uninitialized implementations). Skipped entirely. |
-| `SafeERC20` instead of a raw `token.transfer()` call | Real mainnet USDT's `transfer` function famously does not return a `bool`, which breaks a naive ERC20 interface call outright. `SafeERC20` handles both compliant and non-compliant tokens correctly — an audited library is the right place to get this exactly right, not a hand-rolled check. Verified directly in `test_WithdrawWorksWithNonCompliantToken`. |
-| Checks-effects-interactions ordering | The event is emitted before the token transfer, which is always the last operation in both `withdraw` and `withdrawAll`. |
-| Custom errors instead of `require` strings | Cheaper, and equally clear for this size of contract. |
-| No reentrancy guard | Only `owner` can call the withdrawal functions, and standard ERC20 `transfer` doesn't hand control back to the recipient mid-call the way a native ETH send to a contract can — there's no callback hook here to reenter through in the first place. |
-| No support for any token other than the one fixed at deployment, no `delegatecall`, no arbitrary-call function | Every one of those is a documented source of real-world exploits. None of them are needed for "hold USDT, let the owner withdraw it," so none of them exist here. |
+| The private key is a properly-generated random 256-bit number (`cast wallet new`, standard secp256k1) | Guessing or brute-forcing it is not "hard" — it's computationally infeasible with any realistic amount of compute. This is the same math securing all of Bitcoin and Ethereum. |
+| The key has never been imported into any service that stores it remotely | No custodial exchange, no cloud wallet, no third party holds a copy. |
+| The frontend never touches the private key | It only ever requests signatures through a connected wallet extension (e.g. MetaMask); the raw key never enters the page's JavaScript context. |
+| No admin backdoor, no recovery mechanism, no second key | There's genuinely nothing else to target — key custody is the entire security model, by design, not by omission. |
 
 ## What's explicitly *not* claimed
 
-- This is not audited by a third party. It's a solo project reviewed with
-  fuzzing, invariant testing, and static analysis — see below — not a
-  substitute for a professional audit.
-- $10 will not attract serious professional attention. Treat "nobody broke
-  it" as "nobody tried hard," not as proof of anything. See
-  [RULES.md](./RULES.md) for the honest framing.
-- "Unhackable" isn't a real property software can have. The goal here is
-  *small enough that a real read-through is feasible*, not invulnerability.
-- The frontend in `web/` provides zero security of its own — it's a
-  convenience UI. The contract's on-chain access control is the only thing
-  that actually protects the funds; see the notice on the page itself.
+- This is not a professional security audit of anything — it's one person's
+  key-handling practices, held to public scrutiny.
+- $10 will not attract serious researcher attention. "Nobody broke it" means
+  "nobody tried hard," not "this is provably secure."
+- "Unhackable" isn't a real property anything can have. The honest claim is
+  narrower: the only real attack surface here is key exposure, and real
+  effort has gone into making sure that hasn't happened (see
+  [RULES.md](./RULES.md) for exactly what's in/out of scope).
 
-## Verification
+## Building / viewing locally
 
-### Tests
+The frontend is a single static file, no build step:
 
 ```bash
-forge test -vv
-```
-
-17 tests: unit tests for every function and revert path (including
-construction, over-withdrawal, and ownership-immutability checks), fuzz
-tests (10,000 runs each) confirming no non-owner address can ever withdraw
-and no owner withdrawal can ever exceed the vault's balance, and dedicated
-tests proving correct behavior against both a standard ERC20 token and one
-that mimics real USDT's non-standard (no return value) `transfer` function.
-
-### Invariants
-
-```bash
-forge test --match-contract VaultInvariantsTest -vv
-```
-
-A stateful fuzzer (256 runs × 100 calls each) drives the vault through random
-sequences of deposits, owner withdrawals, and attacker withdrawal attempts,
-and checks two invariants hold across all of them:
-
-- `invariant_NoAttackerEverWithdraws` — no address other than `owner` ever
-  extracts a unit of USDT, across thousands of randomized attempts.
-- `invariant_BalanceNeverExceedsDeposits` — the vault can never pay out more
-  than it ever received.
-
-### Static analysis
-
-```bash
-python -m slither src/Vault.sol
-```
-
-Slither's only findings are informational pragma-version notices from
-OpenZeppelin's own interface files (they deliberately use loose version
-constraints for broad compatibility) — no access-control, reentrancy, or
-arithmetic issues were flagged on the Vault itself.
-
-## Building / running locally
-
-Requires [Foundry](https://book.getfoundry.sh/getting-started/installation).
-
-```bash
-git clone <this repo>
+git clone https://github.com/SoftVibez/bastion-vault
 cd bastion-vault
-forge install
-forge build
-forge test -vv
+# open web/index.html directly, or serve it with any static file server
 ```
 
-## Deploying your own instance
+## Earlier design (not currently live)
 
-```bash
-cp .env.example .env
-# fill in .env with a FRESH burner key — never reuse a wallet you use elsewhere
+Before settling on the plain-wallet approach above, this project built a
+from-scratch Solidity smart-contract wallet — immutable single owner, no
+upgradability, no admin backdoor, covered by 17 tests including 10,000-run
+fuzz tests and a stateful invariant suite. It was never deployed and holds
+no funds. The code is kept in the repo as a documented alternative, not as
+part of the live challenge:
 
-forge script script/Deploy.s.sol:Deploy \
-  --rpc-url $POLYGON_RPC_URL --broadcast --verify -vvvv
-```
+- [`src/Vault.sol`](./src/Vault.sol) — the contract
+- [`test/`](./test/) — unit, fuzz, and invariant tests (`forge test -vv`)
+- [`script/Deploy.s.sol`](./script/Deploy.s.sol) — deploy script, unused
 
-The deployer's address becomes the vault's immutable `owner`. Fund the
-deployed address by sending USDT (PoS, on Polygon) to it directly — any
-address can deposit. Once deployed, set `CONTRACT_ADDRESS` near the top of
-[`web/index.html`](./web/index.html) to get the dashboard live.
+Requires [Foundry](https://book.getfoundry.sh/getting-started/installation)
+to build/test: `forge install && forge build && forge test -vv`.
 
 ## Rules of the challenge
 
